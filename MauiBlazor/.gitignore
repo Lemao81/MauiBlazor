@@ -1,0 +1,5 @@
+.idea/
+.vs/
+bin/
+obj/
+api_keys.xml

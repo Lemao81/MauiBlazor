@@ -1,0 +1,75 @@
+﻿@using Helpers;
+@using System.Diagnostics;
+@using MauiBlazor.Extensions;
+@using MauiBlazor.Views;
+@using static MauiBlazor.Helpers.ExecutionHelper;
+
+@page "/distance"
+
+<h1>Distance</h1>
+<br />
+
+<button class="btn btn-primary" @onclick="OnLockLocationAsync" disabled=@(IsLocked || HasResult)>Lock Location</button>
+<button class="btn btn-primary mx-2" @onclick="OnCalculateDistanceAsync" disabled=@(!IsLocked || HasResult)>Show Distance</button>
+
+@if (IsLocked)
+{
+    <br />
+    <br />
+    <p>Locked location: @(_lockedLocation?.ToCoordinatesString())</p>
+}
+
+@if (_finalLocation is not null)
+{
+    <p>Final location: @(_finalLocation.ToCoordinatesString())</p>
+}
+
+@if (HasResult)
+{
+    <br />
+    <p>Distance: @Distance</p>
+    <br />
+    <button class="btn btn-primary" @onclick="OnReset" disabled="@(!HasResult)">Reset</button>
+    <button class="btn btn-primary" @onclick="OnShowMapAsync">Show On Map</button>
+}
+
+@code {
+    private Location? _lockedLocation = null;
+    private Location? _finalLocation = null;
+    private double? _distance = null;
+
+    private bool IsLocked => _lockedLocation is not null;
+    private bool HasResult => _distance is not null;
+    private string Distance => _distance is not null ? $"{_distance.ToTwoDigitString()} km" : string.Empty;
+
+    private async Task OnLockLocationAsync() => await ExecuteErrorHandledAsync(async () => _lockedLocation = await LocationHelper.GetLocationAsync());
+
+    private async Task OnCalculateDistanceAsync()
+    {
+        if (_lockedLocation is null) return;
+
+        await ExecuteErrorHandledAsync(async () =>
+        {
+            _finalLocation = await LocationHelper.GetLocationAsync();
+            if (_finalLocation is not null)
+            {
+                _distance = Location.CalculateDistance(_lockedLocation, _finalLocation, DistanceUnits.Kilometers);
+            }
+        });
+    }
+
+    private void OnReset()
+    {
+        _lockedLocation = null;
+        _finalLocation = null;
+        _distance = null;
+    }
+
+    private async Task OnShowMapAsync() => await ExecuteErrorHandledAsync(async () =>
+                                                {
+                                                    if (_lockedLocation is not null && _finalLocation is not null)
+                                                    {
+                                                        await Application.Current.MainPage.Navigation.PushAsync(new MapPage(new List<Location> { _lockedLocation, _finalLocation }));
+                                                    }
+                                                });
+}

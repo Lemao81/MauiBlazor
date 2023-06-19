@@ -1,0 +1,94 @@
+﻿@page "/routetracking"
+
+@using CommunityToolkit.Maui.Alerts;
+@using MauiBlazor.Entities;
+@using MauiBlazor.Helpers;
+@using MauiBlazor.Interfaces;
+@using Blazorise;
+@using MauiBlazor.Models;
+@using MauiBlazor.Views;
+@using Microsoft.Extensions.Logging;
+@using static MauiBlazor.Helpers.ExecutionHelper;
+
+@inject IRouteTrackingPageService RouteTrackingPageService;
+@inject ILogger<RouteTrackingPage> Logger
+
+<h1>Route</h1>
+<br />
+
+<Div Style="font-size: 0.65rem">
+    <Table Striped>
+        <TableHeader ThemeContrast="ThemeContrast.Dark" Style="font-size: 0.9rem">
+            <TableRow>
+                <TableHeaderCell>#</TableHeaderCell>
+                <TableHeaderCell>Coord.</TableHeaderCell>
+                <TableHeaderCell>Time</TableHeaderCell>
+                <TableHeaderCell>Abs.</TableHeaderCell>
+                <TableHeaderCell>Rel.</TableHeaderCell>
+            </TableRow>
+        </TableHeader>
+
+        <TableBody>
+            @if (_routeTrackingViewModel is not null)
+            {
+                for (int i = 0; i < _routeTrackingViewModel.RouteLocations.Count; i++)
+                {
+                    var number = i + 1;
+                    var location = _routeTrackingViewModel.RouteLocations[i];
+                    <TableRow Clicked="@(() => OnLocationClickedAsync(location.RouteLocation))">
+                        <TableRowHeader>@number</TableRowHeader>
+                        <TableRowCell>@location.Coordinates</TableRowCell>
+                        <TableRowCell>@location.CreationDate</TableRowCell>
+                        <TableRowCell>@location.AbsoluteDuration</TableRowCell>
+                        <TableRowCell>@location.RelativeDuration</TableRowCell>
+                    </TableRow>
+                }
+            }
+        </TableBody>
+    </Table>
+</Div>
+<Div>
+    <Button Color="Color.Primary" Clicked="@OnAddLocationAsync">Add Location</Button>
+    <Button Color="Color.Primary" Clicked="@OnShowRouteAsync" Disabled="@(!HasRoute)">Show Route</Button>
+    <Button Color="Color.Primary" Clicked="@OnResetAsync">Reset</Button>
+</Div>
+
+@code {
+    private RouteTrackingViewModel? _routeTrackingViewModel;
+
+    private bool HasRoute => _routeTrackingViewModel is not null && _routeTrackingViewModel.RouteLocations.Any();
+
+    protected async override Task OnInitializedAsync() => await ExecuteErrorHandledAsync(async () => await FetchLocationsAsync(), Logger);
+
+    private async Task OnAddLocationAsync() => await ExecuteErrorHandledAsync(async () =>
+                                                    {
+                                                        var location = await LocationHelper.GetLocationAsync();
+                                                        if (location is null) return;
+
+                                                        await RouteTrackingPageService.SaveLocationAsync(location);
+                                                        await FetchLocationsAsync();
+                                                        await NotificationHelper.ShowSnackMessage("Location added");
+                                                    }, Logger);
+
+    private async Task OnLocationClickedAsync(RouteLocation routeLocation) => await ExecuteErrorHandledAsync(async () => await Application.Current.MainPage.Navigation.PushAsync(new MapPage(routeLocation)), Logger);
+
+    private async Task OnResetAsync() => await ExecuteErrorHandledAsync(async () =>
+                                            {
+                                                await RouteTrackingPageService.DeleteLocationsAsync();
+                                                await FetchLocationsAsync();
+                                                await NotificationHelper.ShowSnackMessage("Locations removed");
+                                            }, Logger);
+
+    private async Task OnShowRouteAsync() => await ExecuteErrorHandledAsync(async () =>
+    {
+        if (!HasRoute) return;
+
+        await Application.Current.MainPage.Navigation.PushAsync(new MapPage(_routeTrackingViewModel!.RouteLocations.Select(l => l.RouteLocation).ToList()));
+    });
+
+    private async Task FetchLocationsAsync() => await ExecuteErrorHandledAsync(async () =>
+                                                     {
+                                                         var locations = await RouteTrackingPageService.GetLocationsAsync();
+                                                         _routeTrackingViewModel = new RouteTrackingViewModel(locations);
+                                                     }, Logger);
+}

@@ -1,6 +1,5 @@
 ﻿@page "/routetracking"
 
-@using CommunityToolkit.Maui.Alerts;
 @using MauiBlazor.Entities;
 @using MauiBlazor.Helpers;
 @using MauiBlazor.Interfaces;
@@ -8,7 +7,6 @@
 @using MauiBlazor.Models;
 @using MauiBlazor.Views;
 @using Microsoft.Extensions.Logging;
-@using System.Diagnostics;
 @using System.Collections.ObjectModel;
 @using static MauiBlazor.Helpers.ExecutionHelper;
 
@@ -16,7 +14,7 @@
 @inject ILogger<RouteTrackingPage> Logger
 
 <h1>Route</h1>
-<br />
+<br/>
 
 <Div Style="font-size: 0.65rem">
     <Table Striped>
@@ -31,7 +29,7 @@
         </TableHeader>
 
         <TableBody>
-            @for (int i = 0; i < _routeLocations.Count; i++)
+            @for (var i = 0; i < _routeLocations.Count; i++)
             {
                 var number = i + 1;
                 var location = _routeLocations[i];
@@ -52,61 +50,68 @@
     <Button Color="Color.Primary" Clicked="@OnResetAsync" Disabled="@IsAuto">Reset</Button>
 </Div>
 <Div Class="mt-1">
-    <Button Color="Color.Primary" Clicked="@OnStartAutoAsync" Disabled="@IsAuto">Start Auto</Button>
-    <Button Color="Color.Primary" Clicked="@OnStopAutoAsync" Disabled="@(!IsAuto)">Stop Auto</Button>
+    <Button Color="Color.Primary" Clicked="@OnStartAuto" Disabled="@IsAuto">Start Auto</Button>
+    <Button Color="Color.Primary" Clicked="@OnStopAuto" Disabled="@(!IsAuto)">Stop Auto</Button>
 </Div>
-<br />
+<br/>
 
 @code {
-    private ObservableCollection<RouteLocationViewModel> _routeLocations = new ObservableCollection<RouteLocationViewModel>();
+    private readonly ObservableCollection<RouteLocationViewModel> _routeLocations = new();
     private IDispatcherTimer? _timer;
 
     private bool HasRoute => _routeLocations.Any();
     private bool IsAuto => _timer is not null;
 
-    protected async override Task OnInitializedAsync() => await ExecuteErrorHandledAsync(async () => await FetchLocationsAsync(), Logger);
+    protected override async Task OnInitializedAsync() => await ExecuteErrorHandledAsync(async () => await FetchLocationsAsync(), Logger);
 
     private async Task OnAddLocationAsync() => await ExecuteErrorHandledAsync(async () => await AddLocationAsync(true), Logger);
 
-    private async Task OnLocationClickedAsync(RouteLocation routeLocation) => await ExecuteErrorHandledAsync(async () => await Application.Current.MainPage.Navigation.PushAsync(new MapPage(routeLocation)), Logger);
+    private async Task OnLocationClickedAsync(RouteLocation routeLocation) => await ExecuteErrorHandledAsync(async () =>
+    {
+        if (Application.Current?.MainPage is null) return;
+
+        await Application.Current.MainPage.Navigation.PushAsync(new MapPage(routeLocation));
+    }, Logger);
 
     private async Task OnShowRouteAsync() => await ExecuteErrorHandledAsync(async () =>
     {
-        if (!HasRoute) return;
+        if (!HasRoute || Application.Current?.MainPage is null) return;
 
         await Application.Current.MainPage.Navigation.PushAsync(new MapPage(_routeLocations.Select(l => l.RouteLocation).ToList()));
     });
 
     private async Task OnResetAsync() => await ExecuteErrorHandledAsync(async () =>
-                                            {
-                                                await RouteTrackingPageService.DeleteLocationsAsync();
-                                                await FetchLocationsAsync();
-                                                await NotificationHelper.ShowSnackMessage("Locations removed");
-                                            }, Logger);
-
-    private async Task OnStartAutoAsync()
     {
+        await RouteTrackingPageService.DeleteLocationsAsync();
+        await FetchLocationsAsync();
+        await NotificationHelper.ShowSnackMessage("Locations removed");
+    }, Logger);
+
+    private void OnStartAuto()
+    {
+        if (Application.Current is null) return;
+
         _timer = Application.Current.Dispatcher.CreateTimer();
         _timer.Interval = TimeSpan.FromMinutes(1);
-        _timer.Tick += async (s, e) => await AddAutoLocationAsync();
+        _timer.Tick += async (_, _) => await AddAutoLocationAsync();
         _timer.Start();
     }
 
-    private async Task OnStopAutoAsync()
+    private void OnStopAuto()
     {
         _timer?.Stop();
         _timer = null;
     }
 
     private async Task FetchLocationsAsync() => await ExecuteErrorHandledAsync(async () =>
-                                                     {
-                                                         var locations = await RouteTrackingPageService.GetLocationsAsync();
-                                                         _routeLocations.Clear();
-                                                         foreach (var location in GetLocationViewModels(locations))
-                                                         {
-                                                             _routeLocations.Add(location);
-                                                         }
-                                                     }, Logger);
+    {
+        var locations = await RouteTrackingPageService.GetLocationsAsync();
+        _routeLocations.Clear();
+        foreach (var location in GetLocationViewModels(locations))
+        {
+            _routeLocations.Add(location);
+        }
+    }, Logger);
 
     private async Task AddLocationAsync(bool showSnack)
     {
@@ -123,7 +128,7 @@
 
     private async Task AddAutoLocationAsync() => await ExecuteErrorHandledAsync(async () => await AddLocationAsync(false), Logger);
 
-    private IEnumerable<RouteLocationViewModel> GetLocationViewModels(ICollection<RouteLocation> locations)
+    private static IEnumerable<RouteLocationViewModel> GetLocationViewModels(ICollection<RouteLocation> locations)
     {
         if (!locations.Any()) return Enumerable.Empty<RouteLocationViewModel>();
 
@@ -138,4 +143,5 @@
             return new RouteLocationViewModel(routeLocation, absoluteTime, relativeTime);
         });
     }
+
 }

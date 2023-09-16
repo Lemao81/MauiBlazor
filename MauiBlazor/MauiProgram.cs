@@ -30,7 +30,7 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        builder.Services.AddSingleton(sp =>
+        builder.Services.AddSingleton(_ =>
         {
             var db = new AppDatabase();
             Task.Run(() => db.InitAsync()).Wait();

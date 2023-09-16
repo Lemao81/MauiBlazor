@@ -7,6 +7,31 @@ namespace MauiBlazor.Views;
 
 public partial class MapPage : ContentPage
 {
+    public MapPage(Location location)
+    {
+        Initialize();
+
+        var map = CreateMap(location);
+        AddPins(map, location);
+        map.MapClicked += (_, args) =>
+        {
+            if (map.MapElements.Count == 0)
+            {
+                map.MapElements.Add(new Polygon
+                {
+                    StrokeColor = Color.FromArgb("#FF9900"),
+                    StrokeWidth = 8,
+                    FillColor = Color.FromArgb("#88FF9900")
+                });
+            }
+
+            var polygon = map.MapElements.First() as Polygon;
+            polygon?.Geopath.Add(args.Location);
+        };
+
+        Content = map;
+    }
+
     public MapPage(RouteLocation routeLocation)
     {
         Initialize();
@@ -30,7 +55,7 @@ public partial class MapPage : ContentPage
 
         var location = new Location(routeLocations[0].Latitude, routeLocations[0].Longitude);
         var map = CreateMap(location);
-        AddPins(map, routeLocations.Select(l => new Location(l.Latitude, l.Longitude)).ToList());
+        AddPins(map, routeLocations.Select(l => new Location(l.Latitude, l.Longitude)).ToArray());
     }
 
     public MapPage(List<Location> locations)
@@ -38,7 +63,7 @@ public partial class MapPage : ContentPage
         Initialize();
 
         var map = CreateMap(locations[0]);
-        AddPins(map, locations);
+        AddPins(map, locations.ToArray());
     }
 
     private void Initialize()
@@ -50,15 +75,15 @@ public partial class MapPage : ContentPage
 
     private Map CreateMap(Location location)
     {
-        var map = new Map(new MapSpan(location, 0.1, 0.1));
+        var map = new Map(MapSpan.FromCenterAndRadius(location, Distance.FromKilometers(2)));
         Content = map;
 
         return map;
     }
 
-    private void AddPins(Map map, List<Location> locations)
+    private static void AddPins(Map map, params Location[] locations)
     {
-        for (var i = 0; i < locations.Count; i++)
+        for (var i = 0; i < locations.Length; i++)
         {
             map.Pins.Add(new Pin
             {

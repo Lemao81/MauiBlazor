@@ -1,0 +1,26 @@
+﻿@page "/markarea"
+
+@using Blazorise;
+@using MauiBlazor.Helpers
+@using MauiBlazor.Views
+
+<h1>Mark Area</h1>
+<br/>
+
+<Div>
+    <Button Color="Color.Primary" Clicked="OnShowMapAsync">Show Map</Button>
+</Div>
+
+@code {
+
+    private static async Task OnShowMapAsync() => await ExecutionHelper.ExecuteErrorHandledAsync(async () =>
+    {
+        if (Application.Current?.MainPage is null) return;
+
+        var location = await LocationHelper.GetLocationAsync();
+        if (location is null) return;
+
+        await Application.Current.MainPage.Navigation.PushAsync(new MapPage(location));
+    });
+
+}

@@ -8,13 +8,16 @@
 @using MauiBlazor.Views;
 @using Microsoft.Extensions.Logging;
 @using System.Collections.ObjectModel;
+@using System.Text
+@using System.Text.Json
+@using CommunityToolkit.Maui.Storage
 @using static MauiBlazor.Helpers.ExecutionHelper;
 
 @inject IRouteTrackingPageService RouteTrackingPageService;
 @inject ILogger<RouteTrackingPage> Logger
 
 <h1>Route</h1>
-<br/>
+<br />
 
 <Div Style="font-size: 0.65rem">
     <Table Striped>
@@ -53,9 +56,14 @@
     <Button Color="Color.Primary" Clicked="@OnStartAuto" Disabled="@IsAuto">Start Auto</Button>
     <Button Color="Color.Primary" Clicked="@OnStopAuto" Disabled="@(!IsAuto)">Stop Auto</Button>
 </Div>
-<br/>
+<Div Class="mt-1">
+    <Button Color="Color.Primary" Clicked="@OnSaveAsync" Disabled="@(!HasRoute || IsAuto)">Save To File</Button>
+    <Button Color="Color.Primary" Clicked="@OnLoadAsync" Disabled="@IsAuto">Load From File</Button>
+</Div>
+<br />
 
 @code {
+    private const string _saveFileName = "route-tracking.json";
     private readonly ObservableCollection<RouteLocationViewModel> _routeLocations = new();
     private IDispatcherTimer? _timer;
 
@@ -84,7 +92,7 @@
     {
         await RouteTrackingPageService.DeleteLocationsAsync();
         await FetchLocationsAsync();
-        await NotificationHelper.ShowSnackMessage("Locations removed");
+        await NotificationHelper.ShowSnackMessageAsync("Locations removed");
     }, Logger);
 
     private void OnStartAuto()
@@ -103,14 +111,59 @@
         _timer = null;
     }
 
+    private async Task OnSaveAsync() => await ExecuteErrorHandledAsync(async () =>
+                                             {
+                                                 var status = await Permissions.CheckStatusAsync<Permissions.StorageWrite>();
+                                                 if (status != PermissionStatus.Granted)
+                                                 {
+                                                     status = await Permissions.RequestAsync<Permissions.StorageWrite>();
+                                                     if (status != PermissionStatus.Granted) return;
+                                                 }
+
+                                                 var json = JsonSerializer.Serialize(_routeLocations);
+                                                 using var stream = new MemoryStream(Encoding.Default.GetBytes(json));
+                                                 var result = await FileSaver.Default.SaveAsync(_saveFileName, stream, CancellationToken.None);
+                                                 if (!result.IsSuccessful && result.Exception is not null)
+                                                 {
+                                                     Logger.LogError(result.Exception, result.Exception.Message);
+                                                 }
+
+                                                 var message = result.IsSuccessful ? "Routes saved" : "Routes could not be saved";
+                                                 await NotificationHelper.ShowSnackMessageAsync(message);
+                                             }, Logger);
+
+    private async Task OnLoadAsync() => await ExecuteErrorHandledAsync(async () =>
+                                             {
+                                                 var status = await Permissions.CheckStatusAsync<Permissions.StorageRead>();
+                                                 if (status != PermissionStatus.Granted)
+                                                 {
+                                                     status = await Permissions.RequestAsync<Permissions.StorageRead>();
+                                                     if (status != PermissionStatus.Granted) return;
+                                                 }
+
+                                                 var result = await FolderPicker.Default.PickAsync(CancellationToken.None);
+                                                 if (!result.IsSuccessful) return;
+
+                                                 var filePath = Path.Combine(result.Folder.Path, _saveFileName);
+                                                 if (!File.Exists(filePath))
+                                                 {
+                                                     await NotificationHelper.ShowSnackMessageAsync("No routes saved yet");
+
+                                                     return;
+                                                 }
+
+                                                 var json = await File.ReadAllTextAsync(filePath);
+                                                 var savedLocations = JsonSerializer.Deserialize<ObservableCollection<RouteLocationViewModel>>(json);
+                                                 if (savedLocations is not null && savedLocations.Any())
+                                                 {
+                                                     SetLocations(savedLocations);
+                                                 }
+                                             }, Logger);
+
     private async Task FetchLocationsAsync() => await ExecuteErrorHandledAsync(async () =>
     {
         var locations = await RouteTrackingPageService.GetLocationsAsync();
-        _routeLocations.Clear();
-        foreach (var location in GetLocationViewModels(locations))
-        {
-            _routeLocations.Add(location);
-        }
+        SetLocations(GetLocationViewModels(locations));
     }, Logger);
 
     private async Task AddLocationAsync(bool showSnack)
@@ -122,11 +175,20 @@
         await FetchLocationsAsync();
         if (showSnack)
         {
-            await NotificationHelper.ShowSnackMessage("Location added");
+            await NotificationHelper.ShowSnackMessageAsync("Location added");
         }
     }
 
     private async Task AddAutoLocationAsync() => await ExecuteErrorHandledAsync(async () => await AddLocationAsync(false), Logger);
+
+    private void SetLocations(IEnumerable<RouteLocationViewModel> locations)
+    {
+        _routeLocations.Clear();
+        foreach (var location in locations)
+        {
+            _routeLocations.Add(location);
+        }
+    }
 
     private static IEnumerable<RouteLocationViewModel> GetLocationViewModels(ICollection<RouteLocation> locations)
     {
